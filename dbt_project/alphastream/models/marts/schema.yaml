@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: fct_ticker_daily
+    description: "Daily aggregated metrics per ticker with sentiment signals"
+    columns:
+      - name: ticker
+        tests:
+          - not_null
+      - name: news_date
+        tests:
+          - not_null
+      - name: article_count
+        tests:
+          - not_null
