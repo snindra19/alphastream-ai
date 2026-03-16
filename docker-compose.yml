@@ -1,6 +1,8 @@
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
+    networks:
+      - alphastream-network
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -9,20 +11,27 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.4.0
+    networks:
+      - alphastream-network
     depends_on:
       - zookeeper
     ports:
       - "9092:9092"
+      - "29092:29092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
 
   postgres:
     image: postgres:15
+    networks:
+      - alphastream-network
     environment:
       POSTGRES_USER: alphastream
       POSTGRES_PASSWORD: alphastream123
@@ -34,8 +43,84 @@ services:
 
   redis:
     image: redis:7-alpine
+    networks:
+      - alphastream-network
     ports:
       - "6379:6379"
 
+  airflow-init:
+    image: apache/airflow:2.8.0
+    networks:
+      - alphastream-network
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://alphastream:alphastream123@postgres/alphastream
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    command: version
+    depends_on:
+      - postgres
+
+  airflow-webserver:
+    image: apache/airflow:2.8.0
+    networks:
+      - alphastream-network
+    restart: always
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://alphastream:alphastream123@postgres/alphastream
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__WEBSERVER__SECRET_KEY: 'alphastream-secret'
+      _PIP_ADDITIONAL_REQUIREMENTS: "kafka-python requests python-dotenv google-cloud-bigquery dbt-bigquery"
+      NEWS_API_KEY: 6f743be97a5045d4882eb745873250c1
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      NEWS_TOPIC: news.events
+      GOOGLE_CLOUD_PROJECT: alphastream-ai
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/creds/application_default_credentials.json
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./dbt_project:/opt/airflow/dbt_project
+      - /c/Users/nindr/AppData/Roaming/gcloud/application_default_credentials.json:/opt/airflow/creds/application_default_credentials.json:ro
+      # - ~/.config/gcloud:/home/airflow/.config/gcloud:ro
+    ports:
+      - "8080:8080"
+    command: webserver
+
+  airflow-scheduler:
+    image: apache/airflow:2.8.0
+    networks:
+      - alphastream-network
+    restart: always
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://alphastream:alphastream123@postgres/alphastream
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      _PIP_ADDITIONAL_REQUIREMENTS: "kafka-python requests python-dotenv google-cloud-bigquery dbt-bigquery"
+      NEWS_API_KEY: 6f743be97a5045d4882eb745873250c1
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      NEWS_TOPIC: news.events
+      GOOGLE_CLOUD_PROJECT: alphastream-ai
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/creds/application_default_credentials.json
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./dbt_project:/opt/airflow/dbt_project
+      - /c/Users/nindr/AppData/Roaming/gcloud/application_default_credentials.json:/opt/airflow/creds/application_default_credentials.json:ro
+      # - ~/.config/gcloud:/home/airflow/.config/gcloud:ro
+    command: scheduler
+
 volumes:
   postgres_data:
+
+networks:
+  alphastream-network:
+    driver: bridge
