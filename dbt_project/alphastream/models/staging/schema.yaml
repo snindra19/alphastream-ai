@@ -16,4 +16,3 @@ models:
         description: "Article URL"
         tests:
           - not_null
-          - unique

@@ -12,7 +12,7 @@ cleaned AS (
         source,
         ingested_at,
         ROW_NUMBER() OVER (
-            PARTITION BY ticker, title
+            PARTITION BY url, ticker
             ORDER BY ingested_at DESC
         )                                              AS row_num
     FROM source
