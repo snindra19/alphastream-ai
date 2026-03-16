@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: raw
+    database: alphastream-ai
+    schema: raw
+    tables:
+      - name: raw_news
+        description: "Raw news headlines ingested from NewsAPI via Kafka"
